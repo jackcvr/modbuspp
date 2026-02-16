@@ -1,0 +1,26 @@
+FROM alpine:latest
+
+RUN apk add --no-cache \
+    build-base \
+    cmake \
+    autoconf \
+    automake \
+    libtool \
+    git \
+    pkgconf \
+    linux-headers \
+    socat \
+    libmodbus-dev
+
+RUN apk add --no-cache zig \
+    && printf '#!/bin/sh\nexec zig cc "$@"\n' > /usr/local/bin/zig-cc \
+    && printf '#!/bin/sh\nexec zig c++ "$@"\n' > /usr/local/bin/zig-c++ \
+    && chmod +x /usr/local/bin/zig-*
+
+ENV CC="zig-cc" \
+    CXX="zig-c++" \
+    CFLAGS="-target x86_64-linux-musl -Oz -flto" \
+    CXXFLAGS="-target x86_64-linux-musl -Oz -flto" \
+    LDFLAGS="-s"
+
+WORKDIR /app
