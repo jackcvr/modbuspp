@@ -6,6 +6,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 
 #if __cplusplus >= 202302L && __has_include(<expected>)
 #include <expected>
@@ -20,8 +21,8 @@ inline const char* strerror(int err) noexcept {
 
 class ModbusException : public std::runtime_error {
 public:
-    explicit ModbusException(const std::string& msg, int code = errno)
-        : std::runtime_error(msg + ": " + strerror(errno)), code_(code) {}
+    explicit ModbusException(const std::string& msg, int code)
+        : std::runtime_error(msg + ": " + strerror(code)), code_(code) {}
 
     auto code() const noexcept {
         return code_;
@@ -34,15 +35,15 @@ private:
 struct ExceptionPolicy {
     static int handle(int rc, const char* msg) {
         if (rc == -1) {
-            throw ModbusException(msg);
+            throw ModbusException(msg, errno);
         }
         return rc;
     }
 };
 
-struct CodePolicy {
-    static int handle(int rc, const char*) noexcept {
-        return rc;
+struct ValuePolicy {
+    static int handle(int value, const char*) noexcept {
+        return value;
     }
 };
 
@@ -89,7 +90,7 @@ public:
                     char parity = 'N', int data_bit = 8, int stop_bit = 1) {
         modbus_t* ctx = modbus_new_rtu(device.c_str(), baud, parity, data_bit, stop_bit);
         if (!ctx) {
-            throw ModbusException("Failed to create RTU context");
+            throw std::system_error(errno, std::generic_category(), "Failed to create RTU context");
         }
         ctx_.reset(ctx);
     }
@@ -97,7 +98,7 @@ public:
     explicit Device(const std::string& ip, int port) {
         modbus_t* ctx = modbus_new_tcp(ip.c_str(), port);
         if (!ctx) {
-            throw ModbusException("Failed to create TCP context");
+            throw std::system_error(errno, std::generic_category(), "Failed to create TCP context");
         }
         ctx_.reset(ctx);
     }
@@ -105,7 +106,8 @@ public:
     explicit Device(const std::string& node, const std::string& service) {
         modbus_t* ctx = modbus_new_tcp_pi(node.c_str(), service.c_str());
         if (!ctx) {
-            throw ModbusException("Failed to create TCP PI context");
+            throw std::system_error(errno, std::generic_category(),
+                                    "Failed to create TCP PI context");
         }
         ctx_.reset(ctx);
     }
@@ -325,7 +327,7 @@ public:
         modbus_mapping_t* map =
             modbus_mapping_new(nb_bits, nb_input_bits, nb_registers, nb_input_registers);
         if (!map) {
-            throw ModbusException("Failed to allocate mapping");
+            throw std::system_error(errno, std::generic_category(), "Failed to allocate mapping");
         }
         map_.reset(map);
     }
@@ -337,7 +339,8 @@ public:
             start_bits, nb_bits, start_input_bits, nb_input_bits, start_registers, nb_registers,
             start_input_registers, nb_input_registers);
         if (!map) {
-            throw ModbusException("Failed to allocate mapping with start addresses");
+            throw std::system_error(errno, std::generic_category(),
+                                    "Failed to allocate mapping with start addresses");
         }
         map_.reset(map);
     }
