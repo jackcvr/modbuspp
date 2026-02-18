@@ -2,14 +2,14 @@ cmake_minimum_required(VERSION 3.20)
 
 project(Modbuspp CXX)
 
-set(MODBUSPP_LIBMODBUS_VERSION "3.1.11")
+set(MODBUSPP_LIBMODBUS_VERSION "3.1.12")
 set(MODBUSPP_LIBMODBUS_VERSION_MIN "3.1.6")
 
-option(MODBUSPP_BUILD_LIBMODBUS "Force building bundled libmodbus" OFF)
+option(MODBUSPP_BUILD_LIBMODBUS "Build bundled libmodbus" OFF)
 
 add_library(modbuspp_shared INTERFACE)
-add_library(modbuspp::shared ALIAS modbuspp_shared)
 add_library(modbuspp_static INTERFACE)
+add_library(modbuspp::shared ALIAS modbuspp_shared)
 add_library(modbuspp::static ALIAS modbuspp_static)
 target_include_directories(modbuspp_shared INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_include_directories(modbuspp_static INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -19,7 +19,7 @@ if(MODBUSPP_BUILD_LIBMODBUS)
     CPMAddPackage(
         NAME libmodbus
         GITHUB_REPOSITORY stephane/libmodbus
-        GIT_TAG v${MODBUSPP_LIBMODBUS_VERSION}
+        VERSION ${MODBUSPP_LIBMODBUS_VERSION}
         DOWNLOAD_ONLY YES
     )
     if(libmodbus_ADDED)
