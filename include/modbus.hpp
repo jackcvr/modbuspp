@@ -2,12 +2,8 @@
 
 #include <modbus.h>
 
-#if LIBMODBUS_VERSION_MAJOR < 3 ||                                   \
-    (LIBMODBUS_VERSION_MAJOR == 3 && LIBMODBUS_VERSION_MINOR < 1) || \
-    (LIBMODBUS_VERSION_MAJOR == 3 && LIBMODBUS_VERSION_MINOR == 1 && \
-     LIBMODBUS_VERSION_MICRO < 6) ||                                 \
-    LIBMODBUS_VERSION_MAJOR > 3
-#error "This version of modbuspp requires libmodbus >=3.1.6 and <4"
+#if !LIBMODBUS_VERSION_CHECK(3, 1, 6) || LIBMODBUS_VERSION_CHECK(4, 0, 0)
+#error "Unsupported libmodbus version: must be >= 3.1.6 and < 4.0.0"
 #endif
 
 #include <cerrno>
