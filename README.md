@@ -112,4 +112,4 @@ int main() {
 
 ## License
 
-MIT License
+[MIT](https://spdx.org/licenses/MIT.html)
