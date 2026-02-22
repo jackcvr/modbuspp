@@ -18,7 +18,6 @@ CPMAddPackage(
     SOURCE_DIR ..
 )
 
-
 # libmodbus (static)
 CPMAddPackage(
     NAME libmodbus
