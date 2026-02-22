@@ -12,7 +12,7 @@ int main() {
     const uint32_t slave_id = 1;
 
     try {
-        modbus::Device client("/dev/ttyUSB1", 115200, 'N', 8, 1);
+        modbus::RTUDevice client("/dev/ttyUSB1", 115200, 'N', 8, 1);
         client.set_slave(slave_id);
         client.connect();
 

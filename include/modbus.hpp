@@ -90,32 +90,6 @@ struct ContextDeleter {
 template <typename ErrorPolicy = ExceptionPolicy>
 class Device {
 public:
-    explicit Device(const std::string& device = "/dev/ttyUSB0", int baud = 115200,
-                    char parity = 'N', int data_bit = 8, int stop_bit = 1) {
-        modbus_t* ctx = modbus_new_rtu(device.c_str(), baud, parity, data_bit, stop_bit);
-        if (!ctx) {
-            throw std::system_error(errno, std::generic_category(), "Failed to create RTU context");
-        }
-        ctx_.reset(ctx);
-    }
-
-    explicit Device(const std::string& ip, int port) {
-        modbus_t* ctx = modbus_new_tcp(ip.c_str(), port);
-        if (!ctx) {
-            throw std::system_error(errno, std::generic_category(), "Failed to create TCP context");
-        }
-        ctx_.reset(ctx);
-    }
-
-    explicit Device(const std::string& node, const std::string& service) {
-        modbus_t* ctx = modbus_new_tcp_pi(node.c_str(), service.c_str());
-        if (!ctx) {
-            throw std::system_error(errno, std::generic_category(),
-                                    "Failed to create TCP PI context");
-        }
-        ctx_.reset(ctx);
-    }
-
     modbus_t* get() const noexcept {
         return ctx_.get();
     }
@@ -136,49 +110,8 @@ public:
         return modbus_get_slave(ctx_.get());
     }
 
-    auto tcp_listen(int nb_connection) {
-        return ErrorPolicy::handle(modbus_tcp_listen(ctx_.get(), nb_connection),
-                                   "TCP listen failed");
-    }
-
-    auto tcp_accept(int& socket) {
-        return ErrorPolicy::handle(modbus_tcp_accept(ctx_.get(), &socket), "TCP accept failed");
-    }
-
     auto connect() {
         return ErrorPolicy::handle(modbus_connect(ctx_.get()), "Connect failed");
-    }
-
-    auto get_serial_mode() {
-        return ErrorPolicy::handle(modbus_rtu_get_serial_mode(ctx_.get()),
-                                   "Get serial mode failed");
-    }
-
-    auto set_serial_mode(int mode) {
-        return ErrorPolicy::handle(modbus_rtu_set_serial_mode(ctx_.get(), mode),
-                                   "Set serial mode failed");
-    }
-
-    auto get_rts() {
-        return ErrorPolicy::handle(modbus_rtu_get_rts(ctx_.get()), "Get RTS failed");
-    }
-
-    auto set_rts(int mode) {
-        return ErrorPolicy::handle(modbus_rtu_set_rts(ctx_.get(), mode), "Set RTS failed");
-    }
-
-    auto set_custom_rts(void (*set_rts_cb)(modbus_t* ctx, int on)) {
-        return ErrorPolicy::handle(modbus_rtu_set_custom_rts(ctx_.get(), set_rts_cb),
-                                   "Set custom RTS failed");
-    }
-
-    auto get_rts_delay() {
-        return ErrorPolicy::handle(modbus_rtu_get_rts_delay(ctx_.get()), "Get RTS delay failed");
-    }
-
-    auto set_rts_delay(int us) {
-        return ErrorPolicy::handle(modbus_rtu_set_rts_delay(ctx_.get(), us),
-                                   "Set RTS delay failed");
     }
 
     auto read_bits(int addr, int nb, uint8_t* dest) {
@@ -313,8 +246,75 @@ public:
                                    "Send raw request failed");
     }
 
-private:
+protected:
+    explicit Device(modbus_t* ctx) : ctx_(ctx) {
+        if (!ctx_) {
+            throw std::system_error(errno, std::generic_category(), "Failed to create context");
+        }
+    }
+
     std::unique_ptr<modbus_t, ContextDeleter> ctx_;
+};
+
+template <typename ErrorPolicy = ExceptionPolicy>
+class RTUDevice : public Device<ErrorPolicy> {
+public:
+    explicit RTUDevice(const std::string& device = "/dev/ttyUSB0", int baud = 115200,
+                       char parity = 'N', int data_bit = 8, int stop_bit = 1)
+        : Device<ErrorPolicy>(modbus_new_rtu(device.c_str(), baud, parity, data_bit, stop_bit)) {}
+
+    auto get_serial_mode() {
+        return ErrorPolicy::handle(modbus_rtu_get_serial_mode(this->ctx_.get()),
+                                   "Get serial mode failed");
+    }
+
+    auto set_serial_mode(int mode) {
+        return ErrorPolicy::handle(modbus_rtu_set_serial_mode(this->ctx_.get(), mode),
+                                   "Set serial mode failed");
+    }
+
+    auto get_rts() {
+        return ErrorPolicy::handle(modbus_rtu_get_rts(this->ctx_.get()), "Get RTS failed");
+    }
+
+    auto set_rts(int mode) {
+        return ErrorPolicy::handle(modbus_rtu_set_rts(this->ctx_.get(), mode), "Set RTS failed");
+    }
+
+    auto set_custom_rts(void (*set_rts_cb)(modbus_t* ctx, int on)) {
+        return ErrorPolicy::handle(modbus_rtu_set_custom_rts(this->ctx_.get(), set_rts_cb),
+                                   "Set custom RTS failed");
+    }
+
+    auto get_rts_delay() {
+        return ErrorPolicy::handle(modbus_rtu_get_rts_delay(this->ctx_.get()),
+                                   "Get RTS delay failed");
+    }
+
+    auto set_rts_delay(int us) {
+        return ErrorPolicy::handle(modbus_rtu_set_rts_delay(this->ctx_.get(), us),
+                                   "Set RTS delay failed");
+    }
+};
+
+template <typename ErrorPolicy = ExceptionPolicy>
+class TCPDevice : public Device<ErrorPolicy> {
+public:
+    explicit TCPDevice(const std::string& ip, int port)
+        : Device<ErrorPolicy>(modbus_new_tcp(ip.c_str(), port)) {}
+
+    explicit TCPDevice(const std::string& node, const std::string& service)
+        : Device<ErrorPolicy>(modbus_new_tcp_pi(node.c_str(), service.c_str())) {}
+
+    auto tcp_listen(int nb_connection) {
+        return ErrorPolicy::handle(modbus_tcp_listen(this->ctx_.get(), nb_connection),
+                                   "TCP listen failed");
+    }
+
+    auto tcp_accept(int& socket) {
+        return ErrorPolicy::handle(modbus_tcp_accept(this->ctx_.get(), &socket),
+                                   "TCP accept failed");
+    }
 };
 
 struct MappingDeleter {

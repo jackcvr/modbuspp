@@ -5,7 +5,7 @@
 
 int main() {
     try {
-        modbus::Device slave("/dev/ttyUSB0", 115200, 'N', 8, 1);
+        modbus::RTUDevice slave("/dev/ttyUSB0", 115200, 'N', 8, 1);
 
         slave.set_slave(1);
         slave.connect();

@@ -15,7 +15,7 @@ Uses the default ExceptionPolicy. Throws modbus::ModbusException on failure.
 
 int main() {
     try {
-        modbus::Device device("/dev/ttyUSB0", 19200, 'N', 8, 1);
+        modbus::RTUDevice device("/dev/ttyUSB0", 19200, 'N', 8, 1);
 
         device.set_slave(1);
         device.connect();
@@ -46,10 +46,10 @@ Uses ExpectedPolicy to return std::expected<int, ModbusError> instead of throwin
 #include <print>
 
 // Use the ExpectedPolicy
-using TcpDevice = modbus::Device<modbus::ExpectedPolicy>;
+using TCPDevice = modbus::TCPDevice<modbus::ExpectedPolicy>;
 
 int main() {
-    TcpDevice device("127.0.0.1", 502);
+    TCPDevice device("127.0.0.1", 502);
 
     if (auto res = device.connect(); !res) {
         std::println(stderr, "Connection failed: {}", res.error().message());
