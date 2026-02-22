@@ -80,7 +80,7 @@ Shows how to use the Mapping class to handle requests.
 
 int main() {
     try {
-        modbus::Device device("/dev/ttyUSB0", 19200, 'N', 8, 1);
+        modbus::RTUDevice device("/dev/ttyUSB0", 19200, 'N', 8, 1);
         device.set_slave(1);
         device.connect();
 
