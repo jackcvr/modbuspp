@@ -1,6 +1,8 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <exception>
 #include <print>
 
 #include "modbus.hpp"
@@ -12,10 +14,21 @@ int main() {
     const uint32_t slave_id = 1;
 
     try {
-        modbus::RTUDevice client("/dev/ttyUSB1", 115200, 'N', 8, 1);
-        client.set_slave(slave_id);
-        client.connect();
+        modbus::exp::RTUDevice client("/dev/ttyUSB1", 115200, 'N', 8, 1);
 
+        if (auto res = client.set_slave(slave_id); !res) {
+            std::println(stderr, "Modbus Error: Set slave failed: {} (Code: {})",
+                         res.error().message(), res.error().code());
+            return EXIT_FAILURE;
+        }
+
+        if (auto res = client.connect(); !res) {
+            std::println(stderr, "Modbus Error: Connect failed: {} (Code: {})",
+                         res.error().message(), res.error().code());
+            return EXIT_FAILURE;
+        }
+
+        // Mapping constructor still throws std::system_error on allocation failure
         modbus::Mapping mapping(MODBUS_MAX_READ_BITS, 0, MODBUS_MAX_READ_REGISTERS, 0);
 
         int nb_points;
@@ -27,7 +40,11 @@ int main() {
 
         auto start_bits = std::chrono::steady_clock::now();
         for (int i = 0; i < n_loop; i++) {
-            client.read_bits(0, nb_points, mapping.tab_bits());
+            if (auto res = client.read_bits(0, nb_points, mapping.tab_bits()); !res) {
+                std::println(stderr, "Modbus Error: Read bits failed: {} (Code: {})",
+                             res.error().message(), res.error().code());
+                return EXIT_FAILURE;
+            }
         }
         auto end_bits = std::chrono::steady_clock::now();
 
@@ -52,7 +69,11 @@ int main() {
 
         auto start_regs = std::chrono::steady_clock::now();
         for (int i = 0; i < n_loop; i++) {
-            client.read_registers(0, nb_points, mapping.tab_registers());
+            if (auto res = client.read_registers(0, nb_points, mapping.tab_registers()); !res) {
+                std::println(stderr, "Modbus Error: Read registers failed: {} (Code: {})",
+                             res.error().message(), res.error().code());
+                return EXIT_FAILURE;
+            }
         }
         auto end_regs = std::chrono::steady_clock::now();
 
@@ -72,9 +93,9 @@ int main() {
         std::println("* {:.2f} KiB/s\n", kib_s_regs);
 
     } catch (const std::exception& e) {
-        std::println(stderr, "Error: {}", e.what());
-        return -1;
+        std::println(stderr, "Standard Error: {}", e.what());
+        return EXIT_FAILURE;
     }
 
-    return 0;
+    return EXIT_SUCCESS;
 }

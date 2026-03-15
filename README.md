@@ -9,9 +9,9 @@ RTU Master (Default: Exceptions)
 Uses the default ExceptionPolicy. Throws modbus::ModbusException on failure.
 
 ```C++
-#include <modbus.hpp>
-#include <vector>
 #include <iostream>
+#include <vector>
+#include <modbus.hpp>
 
 int main() {
     try {
@@ -41,15 +41,12 @@ TCP Master (C++23 std::expected)
 Uses ExpectedPolicy to return std::expected<int, ModbusError> instead of throwing.
 
 ```C++
-#include <modbus.hpp>
-#include <vector>
 #include <print>
-
-// Use the ExpectedPolicy
-using TCPDevice = modbus::TCPDevice<modbus::ExpectedPolicy>;
+#include <vector>
+#include <modbus.hpp>
 
 int main() {
-    TCPDevice device("127.0.0.1", 502);
+    modbus::exp::TCPDevice device("127.0.0.1", 502);
 
     if (auto res = device.connect(); !res) {
         std::println(stderr, "Connection failed: {}", res.error().message());
@@ -74,9 +71,9 @@ RTU Slave / Server
 Shows how to use the Mapping class to handle requests.
 
 ```C++
-#include <modbus.hpp>
 #include <iostream>
 #include <vector>
+#include <modbus.hpp>
 
 int main() {
     try {
