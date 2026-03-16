@@ -1,6 +1,6 @@
 # Modbuspp
 
-A modern header-only C++17/23 wrapper for [libmodbus](https://github.com/stephane/libmodbus).
+A modern header-only C++11/23 wrapper for [libmodbus](https://github.com/stephane/libmodbus).
 
 ## Usage Examples
 
