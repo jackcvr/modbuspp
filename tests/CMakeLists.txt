@@ -2,11 +2,13 @@ cmake_minimum_required(VERSION 3.18)
 
 project(ModbusppTest CXX)
 
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 set(LIBMODBUS_VERSION "3.1.6")
 
-function(add_exe name src std)
+function(add_exe name src)
     add_executable(${name} ${src})
-    target_compile_features(${name} PRIVATE cxx_std_${std})
     target_compile_options(${name} PRIVATE -Os -pedantic -Wall -Wextra -U_LIBCPP_ENABLE_CXX17_REMOVED_UNEXPECTED_FUNCTIONS)
 endfunction()
 
@@ -54,7 +56,7 @@ target_link_options(master_static PRIVATE -static)
 # libmodbus (dynamic pre-installed)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(libmodbus REQUIRED IMPORTED_TARGET libmodbus>=${LIBMODBUS_VERSION})
-add_exe(slave_dynamic slave.cpp 23)
-add_exe(master_dynamic master.cpp 23)
+add_exe(slave_dynamic slave.cpp)
+add_exe(master_dynamic master.cpp)
 target_link_libraries(slave_dynamic PRIVATE modbuspp PkgConfig::libmodbus)
 target_link_libraries(master_dynamic PRIVATE modbuspp PkgConfig::libmodbus)

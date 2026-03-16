@@ -14,7 +14,7 @@ int main() {
     const uint32_t slave_id = 1;
 
     try {
-        modbus::exp::RTUDevice client("/dev/ttyUSB1", 115200, 'N', 8, 1);
+        modbus::RTUDevice<modbus::ExpectedPolicy> client("/dev/ttyUSB1", 115200, 'N', 8, 1);
 
         if (auto res = client.set_slave(slave_id); !res) {
             std::println(stderr, "Modbus Error: Set slave failed: {} (Code: {})",

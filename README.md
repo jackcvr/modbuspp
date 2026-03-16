@@ -46,7 +46,7 @@ Uses ExpectedPolicy to return std::expected<int, ModbusError> instead of throwin
 #include <modbus.hpp>
 
 int main() {
-    modbus::exp::TCPDevice device("127.0.0.1", 502);
+    modbus::TCPDevice<modbus::ExpectedPolicy> device("127.0.0.1", 502);
 
     if (auto res = device.connect(); !res) {
         std::println(stderr, "Connection failed: {}", res.error().message());

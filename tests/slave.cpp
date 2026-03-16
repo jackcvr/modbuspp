@@ -6,7 +6,7 @@
 
 int main() {
     try {
-        modbus::exp::RTUDevice slave("/dev/ttyUSB0", 115200, 'N', 8, 1);
+        modbus::RTUDevice<modbus::ExpectedPolicy> slave("/dev/ttyUSB0", 115200, 'N', 8, 1);
 
         if (auto res = slave.set_slave(1); !res) {
             std::println(stderr, "Modbus Error: Set slave failed: {} (Code: {})",

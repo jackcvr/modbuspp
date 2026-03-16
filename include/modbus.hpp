@@ -12,9 +12,11 @@
 #include <string>
 #include <system_error>
 
-#if __cplusplus >= 202302L && __has_include(<expected>)
+#if __has_include(<expected>)
 #include <expected>
+#if defined(__cpp_lib_expected) || (__cplusplus > 202002L)
 #define MODBUSPP_HAS_EXPECTED
+#endif
 #endif
 
 namespace modbus {
@@ -32,9 +34,51 @@ public:
         return code_;
     }
 
-private:
+protected:
     int code_;
 };
+
+struct ExceptionPolicy {
+    static int handle(int rc, const char* msg) {
+        if (rc == -1) {
+            throw ModbusException(msg, errno);
+        }
+        return rc;
+    }
+};
+
+struct ValuePolicy {
+    static int handle(int value, const char*) noexcept {
+        return value;
+    }
+};
+
+#ifdef MODBUSPP_HAS_EXPECTED
+class ModbusError {
+public:
+    explicit ModbusError(int code) : code_(code) {}
+
+    auto code() const noexcept {
+        return code_;
+    }
+
+    auto message() const noexcept {
+        return strerror(code_);
+    }
+
+protected:
+    int code_;
+};
+
+struct ExpectedPolicy {
+    static std::expected<int, ModbusError> handle(int rc, const char*) noexcept {
+        if (rc == -1) {
+            return std::unexpected(ModbusError(errno));
+        }
+        return rc;
+    }
+};
+#endif
 
 struct ContextDeleter {
     void operator()(modbus_t* ctx) const noexcept {
@@ -45,14 +89,9 @@ struct ContextDeleter {
     }
 };
 
-class BaseDevice {
+template <typename ErrorPolicy = ExceptionPolicy>
+class Device {
 public:
-    explicit BaseDevice(modbus_t* ctx) : ctx_(ctx) {
-        if (!ctx_) {
-            throw std::system_error(errno, std::generic_category(), "Failed to create context");
-        }
-    }
-
     modbus_t* get() const noexcept {
         return ctx_.get();
     }
@@ -61,98 +100,115 @@ public:
         modbus_close(ctx_.get());
     }
 
-    int flush() {
-        return modbus_flush(ctx_.get());
+    auto flush() {
+        return ErrorPolicy::handle(modbus_flush(ctx_.get()), "Flush failed");
     }
 
-    int set_slave(int slave_id) {
-        return modbus_set_slave(ctx_.get(), slave_id);
+    auto set_slave(int slave_id) {
+        return ErrorPolicy::handle(modbus_set_slave(ctx_.get(), slave_id), "Set slave failed");
     }
 
     int get_slave() const noexcept {
         return modbus_get_slave(ctx_.get());
     }
 
-    int connect() {
-        return modbus_connect(ctx_.get());
+    auto connect() {
+        return ErrorPolicy::handle(modbus_connect(ctx_.get()), "Connect failed");
     }
 
-    int read_bits(int addr, int nb, uint8_t* dest) {
-        return modbus_read_bits(ctx_.get(), addr, nb, dest);
+    auto read_bits(int addr, int nb, uint8_t* dest) {
+        return ErrorPolicy::handle(modbus_read_bits(ctx_.get(), addr, nb, dest),
+                                   "Read bits failed");
     }
 
-    int read_input_bits(int addr, int nb, uint8_t* dest) {
-        return modbus_read_input_bits(ctx_.get(), addr, nb, dest);
+    auto read_input_bits(int addr, int nb, uint8_t* dest) {
+        return ErrorPolicy::handle(modbus_read_input_bits(ctx_.get(), addr, nb, dest),
+                                   "Read input bits failed");
     }
 
-    int write_bit(int addr, bool status) {
-        return modbus_write_bit(ctx_.get(), addr, status ? 1 : 0);
+    auto write_bit(int addr, bool status) {
+        return ErrorPolicy::handle(modbus_write_bit(ctx_.get(), addr, status ? 1 : 0),
+                                   "Write bit failed");
     }
 
-    int write_bits(int addr, int nb, const uint8_t* data) {
-        return modbus_write_bits(ctx_.get(), addr, nb, data);
+    auto write_bits(int addr, int nb, const uint8_t* data) {
+        return ErrorPolicy::handle(modbus_write_bits(ctx_.get(), addr, nb, data),
+                                   "Write bits failed");
     }
 
-    int read_registers(int addr, int nb, uint16_t* dest) {
-        return modbus_read_registers(ctx_.get(), addr, nb, dest);
+    auto read_registers(int addr, int nb, uint16_t* dest) {
+        return ErrorPolicy::handle(modbus_read_registers(ctx_.get(), addr, nb, dest),
+                                   "Read registers failed");
     }
 
-    int read_input_registers(int addr, int nb, uint16_t* dest) {
-        return modbus_read_input_registers(ctx_.get(), addr, nb, dest);
+    auto read_input_registers(int addr, int nb, uint16_t* dest) {
+        return ErrorPolicy::handle(modbus_read_input_registers(ctx_.get(), addr, nb, dest),
+                                   "Read input registers failed");
     }
 
-    int write_register(int addr, uint16_t value) {
-        return modbus_write_register(ctx_.get(), addr, value);
+    auto write_register(int addr, uint16_t value) {
+        return ErrorPolicy::handle(modbus_write_register(ctx_.get(), addr, value),
+                                   "Write register failed");
     }
 
-    int write_registers(int addr, int nb, const uint16_t* data) {
-        return modbus_write_registers(ctx_.get(), addr, nb, data);
+    auto write_registers(int addr, int nb, const uint16_t* data) {
+        return ErrorPolicy::handle(modbus_write_registers(ctx_.get(), addr, nb, data),
+                                   "Write registers failed");
     }
 
-    int write_and_read_registers(int write_addr, int write_nb, const uint16_t* src, int read_addr,
-                                 int read_nb, uint16_t* dest) {
-        return modbus_write_and_read_registers(ctx_.get(), write_addr, write_nb, src, read_addr,
-                                               read_nb, dest);
+    auto write_and_read_registers(int write_addr, int write_nb, const uint16_t* src, int read_addr,
+                                  int read_nb, uint16_t* dest) {
+        return ErrorPolicy::handle(modbus_write_and_read_registers(ctx_.get(), write_addr, write_nb,
+                                                                   src, read_addr, read_nb, dest),
+                                   "Write and read registers failed");
     }
 
-    int mask_write_register(int addr, uint16_t and_mask, uint16_t or_mask) {
-        return modbus_mask_write_register(ctx_.get(), addr, and_mask, or_mask);
+    auto mask_write_register(int addr, uint16_t and_mask, uint16_t or_mask) {
+        return ErrorPolicy::handle(modbus_mask_write_register(ctx_.get(), addr, and_mask, or_mask),
+                                   "Mask write failed");
     }
 
-    int set_error_recovery(modbus_error_recovery_mode mode) {
-        return modbus_set_error_recovery(ctx_.get(), mode);
+    auto set_error_recovery(modbus_error_recovery_mode mode) {
+        return ErrorPolicy::handle(modbus_set_error_recovery(ctx_.get(), mode),
+                                   "Set error recovery failed");
     }
 
-    int set_socket(int s) {
-        return modbus_set_socket(ctx_.get(), s);
+    auto set_socket(int s) {
+        return ErrorPolicy::handle(modbus_set_socket(ctx_.get(), s), "Set socket failed");
     }
 
     int get_socket() const noexcept {
         return modbus_get_socket(ctx_.get());
     }
 
-    int set_response_timeout(uint32_t sec, uint32_t usec) {
-        return modbus_set_response_timeout(ctx_.get(), sec, usec);
+    auto set_response_timeout(uint32_t sec, uint32_t usec) {
+        return ErrorPolicy::handle(modbus_set_response_timeout(ctx_.get(), sec, usec),
+                                   "Set response timeout failed");
     }
 
-    int get_response_timeout(uint32_t* sec, uint32_t* usec) const {
-        return modbus_get_response_timeout(ctx_.get(), sec, usec);
+    auto get_response_timeout(uint32_t* sec, uint32_t* usec) const {
+        return ErrorPolicy::handle(modbus_get_response_timeout(ctx_.get(), sec, usec),
+                                   "Get response timeout failed");
     }
 
-    int set_byte_timeout(uint32_t sec, uint32_t usec) {
-        return modbus_set_byte_timeout(ctx_.get(), sec, usec);
+    auto set_byte_timeout(uint32_t sec, uint32_t usec) {
+        return ErrorPolicy::handle(modbus_set_byte_timeout(ctx_.get(), sec, usec),
+                                   "Set byte timeout failed");
     }
 
-    int get_byte_timeout(uint32_t* sec, uint32_t* usec) const {
-        return modbus_get_byte_timeout(ctx_.get(), sec, usec);
+    auto get_byte_timeout(uint32_t* sec, uint32_t* usec) const {
+        return ErrorPolicy::handle(modbus_get_byte_timeout(ctx_.get(), sec, usec),
+                                   "Get byte timeout failed");
     }
 
-    int set_indication_timeout(uint32_t sec, uint32_t usec) {
-        return modbus_set_indication_timeout(ctx_.get(), sec, usec);
+    auto set_indication_timeout(uint32_t sec, uint32_t usec) {
+        return ErrorPolicy::handle(modbus_set_indication_timeout(ctx_.get(), sec, usec),
+                                   "Set indication timeout failed");
     }
 
-    int get_indication_timeout(uint32_t* sec, uint32_t* usec) const {
-        return modbus_get_indication_timeout(ctx_.get(), sec, usec);
+    auto get_indication_timeout(uint32_t* sec, uint32_t* usec) const {
+        return ErrorPolicy::handle(modbus_get_indication_timeout(ctx_.get(), sec, usec),
+                                   "Get indication timeout failed");
     }
 
     int get_header_length() const noexcept {
@@ -163,247 +219,103 @@ public:
         modbus_set_debug(ctx_.get(), enable ? 1 : 0);
     }
 
-    int receive(uint8_t* req) {
-        return modbus_receive(ctx_.get(), req);
+    auto receive(uint8_t* req) {
+        return ErrorPolicy::handle(modbus_receive(ctx_.get(), req), "Receive failed");
     }
 
-    int receive_confirmation(uint8_t* rsp) {
-        return modbus_receive_confirmation(ctx_.get(), rsp);
+    auto receive_confirmation(uint8_t* rsp) {
+        return ErrorPolicy::handle(modbus_receive_confirmation(ctx_.get(), rsp),
+                                   "Receive confirmation failed");
     }
 
-    int reply(const uint8_t* req, int req_length, modbus_mapping_t* mb_mapping) {
-        return modbus_reply(ctx_.get(), req, req_length, mb_mapping);
+    auto reply(const uint8_t* req, int req_length, modbus_mapping_t* mb_mapping) {
+        return ErrorPolicy::handle(modbus_reply(ctx_.get(), req, req_length, mb_mapping),
+                                   "Reply failed");
     }
 
-    int reply_exception(const uint8_t* req, unsigned int exception_code) {
-        return modbus_reply_exception(ctx_.get(), req, exception_code);
+    auto reply_exception(const uint8_t* req, unsigned int exception_code) {
+        return ErrorPolicy::handle(modbus_reply_exception(ctx_.get(), req, exception_code),
+                                   "Reply exception failed");
     }
 
-    int report_slave_id(int max_dest, uint8_t* dest) {
-        return modbus_report_slave_id(ctx_.get(), max_dest, dest);
+    auto report_slave_id(int max_dest, uint8_t* dest) {
+        return ErrorPolicy::handle(modbus_report_slave_id(ctx_.get(), max_dest, dest),
+                                   "Report slave ID failed");
     }
 
-    int send_raw_request(const uint8_t* raw_req, int raw_req_length) {
-        return modbus_send_raw_request(ctx_.get(), raw_req, raw_req_length);
-    }
-
-    int get_serial_mode() {
-        return modbus_rtu_get_serial_mode(ctx_.get());
-    }
-
-    int set_serial_mode(int mode) {
-        return modbus_rtu_set_serial_mode(ctx_.get(), mode);
-    }
-
-    int get_rts() {
-        return modbus_rtu_get_rts(ctx_.get());
-    }
-
-    int set_rts(int mode) {
-        return modbus_rtu_set_rts(ctx_.get(), mode);
-    }
-
-    int set_custom_rts(void (*set_rts_cb)(modbus_t* ctx, int on)) {
-        return modbus_rtu_set_custom_rts(ctx_.get(), set_rts_cb);
-    }
-
-    int get_rts_delay() {
-        return modbus_rtu_get_rts_delay(ctx_.get());
-    }
-
-    int set_rts_delay(int us) {
-        return modbus_rtu_set_rts_delay(ctx_.get(), us);
-    }
-
-    int tcp_listen(int nb_connection) {
-        return modbus_tcp_listen(ctx_.get(), nb_connection);
-    }
-
-    int tcp_accept(int* socket) {
-        return modbus_tcp_accept(ctx_.get(), socket);
+    auto send_raw_request(const uint8_t* raw_req, int raw_req_length) {
+        return ErrorPolicy::handle(modbus_send_raw_request(ctx_.get(), raw_req, raw_req_length),
+                                   "Send raw request failed");
     }
 
 protected:
+    explicit Device(modbus_t* ctx) : ctx_(ctx) {
+        if (!ctx_) {
+            throw std::system_error(errno, std::generic_category(), "Failed to create context");
+        }
+    }
+
     std::unique_ptr<modbus_t, ContextDeleter> ctx_;
 };
 
-class Device : public BaseDevice {
-protected:
-    using BaseDevice::BaseDevice;
-
-    static int check(int rc, const char* msg) {
-        if (rc == -1) {
-            throw ModbusException(msg, errno);
-        }
-        return rc;
-    }
-
-public:
-    int flush() {
-        return check(BaseDevice::flush(), "Flush failed");
-    }
-
-    int set_slave(int slave_id) {
-        return check(BaseDevice::set_slave(slave_id), "Set slave failed");
-    }
-
-    int connect() {
-        return check(BaseDevice::connect(), "Connect failed");
-    }
-
-    int read_bits(int addr, int nb, uint8_t* dest) {
-        return check(BaseDevice::read_bits(addr, nb, dest), "Read bits failed");
-    }
-
-    int read_input_bits(int addr, int nb, uint8_t* dest) {
-        return check(BaseDevice::read_input_bits(addr, nb, dest), "Read input bits failed");
-    }
-
-    int write_bit(int addr, bool status) {
-        return check(BaseDevice::write_bit(addr, status), "Write bit failed");
-    }
-
-    int write_bits(int addr, int nb, const uint8_t* data) {
-        return check(BaseDevice::write_bits(addr, nb, data), "Write bits failed");
-    }
-
-    int read_registers(int addr, int nb, uint16_t* dest) {
-        return check(BaseDevice::read_registers(addr, nb, dest), "Read registers failed");
-    }
-
-    int read_input_registers(int addr, int nb, uint16_t* dest) {
-        return check(BaseDevice::read_input_registers(addr, nb, dest),
-                     "Read input registers failed");
-    }
-
-    int write_register(int addr, uint16_t value) {
-        return check(BaseDevice::write_register(addr, value), "Write register failed");
-    }
-
-    int write_registers(int addr, int nb, const uint16_t* data) {
-        return check(BaseDevice::write_registers(addr, nb, data), "Write registers failed");
-    }
-
-    int write_and_read_registers(int write_addr, int write_nb, const uint16_t* src, int read_addr,
-                                 int read_nb, uint16_t* dest) {
-        return check(BaseDevice::write_and_read_registers(write_addr, write_nb, src, read_addr,
-                                                          read_nb, dest),
-                     "Write and read registers failed");
-    }
-
-    int mask_write_register(int addr, uint16_t and_mask, uint16_t or_mask) {
-        return check(BaseDevice::mask_write_register(addr, and_mask, or_mask), "Mask write failed");
-    }
-
-    int set_error_recovery(modbus_error_recovery_mode mode) {
-        return check(BaseDevice::set_error_recovery(mode), "Set error recovery failed");
-    }
-
-    int set_socket(int s) {
-        return check(BaseDevice::set_socket(s), "Set socket failed");
-    }
-
-    int set_response_timeout(uint32_t sec, uint32_t usec) {
-        return check(BaseDevice::set_response_timeout(sec, usec), "Set response timeout failed");
-    }
-
-    int get_response_timeout(uint32_t* sec, uint32_t* usec) const {
-        return check(BaseDevice::get_response_timeout(sec, usec), "Get response timeout failed");
-    }
-
-    int set_byte_timeout(uint32_t sec, uint32_t usec) {
-        return check(BaseDevice::set_byte_timeout(sec, usec), "Set byte timeout failed");
-    }
-
-    int get_byte_timeout(uint32_t* sec, uint32_t* usec) const {
-        return check(BaseDevice::get_byte_timeout(sec, usec), "Get byte timeout failed");
-    }
-
-    int set_indication_timeout(uint32_t sec, uint32_t usec) {
-        return check(BaseDevice::set_indication_timeout(sec, usec),
-                     "Set indication timeout failed");
-    }
-
-    int get_indication_timeout(uint32_t* sec, uint32_t* usec) const {
-        return check(BaseDevice::get_indication_timeout(sec, usec),
-                     "Get indication timeout failed");
-    }
-
-    int receive(uint8_t* req) {
-        return check(BaseDevice::receive(req), "Receive failed");
-    }
-
-    int receive_confirmation(uint8_t* rsp) {
-        return check(BaseDevice::receive_confirmation(rsp), "Receive confirmation failed");
-    }
-
-    int reply(const uint8_t* req, int req_length, modbus_mapping_t* mb_mapping) {
-        return check(BaseDevice::reply(req, req_length, mb_mapping), "Reply failed");
-    }
-
-    int reply_exception(const uint8_t* req, unsigned int exception_code) {
-        return check(BaseDevice::reply_exception(req, exception_code), "Reply exception failed");
-    }
-
-    int report_slave_id(int max_dest, uint8_t* dest) {
-        return check(BaseDevice::report_slave_id(max_dest, dest), "Report slave ID failed");
-    }
-
-    int send_raw_request(const uint8_t* raw_req, int raw_req_length) {
-        return check(BaseDevice::send_raw_request(raw_req, raw_req_length),
-                     "Send raw request failed");
-    }
-};
-
-class RTUDevice : public Device {
+template <typename ErrorPolicy = ExceptionPolicy>
+class RTUDevice : public Device<ErrorPolicy> {
 public:
     explicit RTUDevice(const std::string& device = "/dev/ttyUSB0", int baud = 115200,
                        char parity = 'N', int data_bit = 8, int stop_bit = 1)
-        : Device(modbus_new_rtu(device.c_str(), baud, parity, data_bit, stop_bit)) {}
+        : Device<ErrorPolicy>(modbus_new_rtu(device.c_str(), baud, parity, data_bit, stop_bit)) {}
 
-    int get_serial_mode() {
-        return check(BaseDevice::get_serial_mode(), "Get serial mode failed");
+    auto get_serial_mode() {
+        return ErrorPolicy::handle(modbus_rtu_get_serial_mode(this->ctx_.get()),
+                                   "Get serial mode failed");
     }
 
-    int set_serial_mode(int mode) {
-        return check(BaseDevice::set_serial_mode(mode), "Set serial mode failed");
+    auto set_serial_mode(int mode) {
+        return ErrorPolicy::handle(modbus_rtu_set_serial_mode(this->ctx_.get(), mode),
+                                   "Set serial mode failed");
     }
 
-    int get_rts() {
-        return check(BaseDevice::get_rts(), "Get RTS failed");
+    auto get_rts() {
+        return ErrorPolicy::handle(modbus_rtu_get_rts(this->ctx_.get()), "Get RTS failed");
     }
 
-    int set_rts(int mode) {
-        return check(BaseDevice::set_rts(mode), "Set RTS failed");
+    auto set_rts(int mode) {
+        return ErrorPolicy::handle(modbus_rtu_set_rts(this->ctx_.get(), mode), "Set RTS failed");
     }
 
-    int set_custom_rts(void (*set_rts_cb)(modbus_t* ctx, int on)) {
-        return check(BaseDevice::set_custom_rts(set_rts_cb), "Set custom RTS failed");
+    auto set_custom_rts(void (*set_rts_cb)(modbus_t* ctx, int on)) {
+        return ErrorPolicy::handle(modbus_rtu_set_custom_rts(this->ctx_.get(), set_rts_cb),
+                                   "Set custom RTS failed");
     }
 
-    int get_rts_delay() {
-        return check(BaseDevice::get_rts_delay(), "Get RTS delay failed");
+    auto get_rts_delay() {
+        return ErrorPolicy::handle(modbus_rtu_get_rts_delay(this->ctx_.get()),
+                                   "Get RTS delay failed");
     }
 
-    int set_rts_delay(int us) {
-        return check(BaseDevice::set_rts_delay(us), "Set RTS delay failed");
+    auto set_rts_delay(int us) {
+        return ErrorPolicy::handle(modbus_rtu_set_rts_delay(this->ctx_.get(), us),
+                                   "Set RTS delay failed");
     }
 };
 
-class TCPDevice : public Device {
+template <typename ErrorPolicy = ExceptionPolicy>
+class TCPDevice : public Device<ErrorPolicy> {
 public:
     explicit TCPDevice(const std::string& ip, int port)
-        : Device(modbus_new_tcp(ip.c_str(), port)) {}
+        : Device<ErrorPolicy>(modbus_new_tcp(ip.c_str(), port)) {}
 
     explicit TCPDevice(const std::string& node, const std::string& service)
-        : Device(modbus_new_tcp_pi(node.c_str(), service.c_str())) {}
+        : Device<ErrorPolicy>(modbus_new_tcp_pi(node.c_str(), service.c_str())) {}
 
-    int tcp_listen(int nb_connection) {
-        return check(BaseDevice::tcp_listen(nb_connection), "TCP listen failed");
+    auto tcp_listen(int nb_connection) {
+        return ErrorPolicy::handle(modbus_tcp_listen(this->ctx_.get(), nb_connection),
+                                   "TCP listen failed");
     }
 
-    int tcp_accept(int* socket) {
-        return check(BaseDevice::tcp_accept(socket), "TCP accept failed");
+    auto tcp_accept(int* socket) {
+        return ErrorPolicy::handle(modbus_tcp_accept(this->ctx_.get(), socket),
+                                   "TCP accept failed");
     }
 };
 
@@ -459,207 +371,8 @@ public:
         return map_->tab_input_registers;
     }
 
-private:
+protected:
     std::unique_ptr<modbus_mapping_t, MappingDeleter> map_;
 };
-
-#ifdef MODBUSPP_HAS_EXPECTED
-namespace exp {
-
-class ModbusError {
-public:
-    ModbusError(int code) : code_(code) {}
-
-    auto code() const noexcept {
-        return code_;
-    }
-
-    auto message() const noexcept {
-        return modbus::strerror(code_);
-    }
-
-private:
-    int code_;
-};
-
-using Result = std::expected<int, ModbusError>;
-
-class Device : public BaseDevice {
-protected:
-    using BaseDevice::BaseDevice;
-
-    static Result check(int rc) {
-        if (rc == -1) {
-            return std::unexpected(ModbusError(errno));
-        }
-        return rc;
-    }
-
-public:
-    Result flush() {
-        return check(BaseDevice::flush());
-    }
-
-    Result set_slave(int slave_id) {
-        return check(BaseDevice::set_slave(slave_id));
-    }
-
-    Result connect() {
-        return check(BaseDevice::connect());
-    }
-
-    Result read_bits(int addr, int nb, uint8_t* dest) {
-        return check(BaseDevice::read_bits(addr, nb, dest));
-    }
-
-    Result read_input_bits(int addr, int nb, uint8_t* dest) {
-        return check(BaseDevice::read_input_bits(addr, nb, dest));
-    }
-
-    Result write_bit(int addr, bool status) {
-        return check(BaseDevice::write_bit(addr, status));
-    }
-
-    Result write_bits(int addr, int nb, const uint8_t* data) {
-        return check(BaseDevice::write_bits(addr, nb, data));
-    }
-
-    Result read_registers(int addr, int nb, uint16_t* dest) {
-        return check(BaseDevice::read_registers(addr, nb, dest));
-    }
-
-    Result read_input_registers(int addr, int nb, uint16_t* dest) {
-        return check(BaseDevice::read_input_registers(addr, nb, dest));
-    }
-
-    Result write_register(int addr, uint16_t value) {
-        return check(BaseDevice::write_register(addr, value));
-    }
-
-    Result write_registers(int addr, int nb, const uint16_t* data) {
-        return check(BaseDevice::write_registers(addr, nb, data));
-    }
-
-    Result write_and_read_registers(int write_addr, int write_nb, const uint16_t* src,
-                                    int read_addr, int read_nb, uint16_t* dest) {
-        return check(BaseDevice::write_and_read_registers(write_addr, write_nb, src, read_addr,
-                                                          read_nb, dest));
-    }
-
-    Result mask_write_register(int addr, uint16_t and_mask, uint16_t or_mask) {
-        return check(BaseDevice::mask_write_register(addr, and_mask, or_mask));
-    }
-
-    Result set_error_recovery(modbus_error_recovery_mode mode) {
-        return check(BaseDevice::set_error_recovery(mode));
-    }
-
-    Result set_socket(int s) {
-        return check(BaseDevice::set_socket(s));
-    }
-
-    Result set_response_timeout(uint32_t sec, uint32_t usec) {
-        return check(BaseDevice::set_response_timeout(sec, usec));
-    }
-
-    Result get_response_timeout(uint32_t* sec, uint32_t* usec) const {
-        return check(BaseDevice::get_response_timeout(sec, usec));
-    }
-
-    Result set_byte_timeout(uint32_t sec, uint32_t usec) {
-        return check(BaseDevice::set_byte_timeout(sec, usec));
-    }
-
-    Result get_byte_timeout(uint32_t* sec, uint32_t* usec) const {
-        return check(BaseDevice::get_byte_timeout(sec, usec));
-    }
-
-    Result set_indication_timeout(uint32_t sec, uint32_t usec) {
-        return check(BaseDevice::set_indication_timeout(sec, usec));
-    }
-
-    Result get_indication_timeout(uint32_t* sec, uint32_t* usec) const {
-        return check(BaseDevice::get_indication_timeout(sec, usec));
-    }
-
-    Result receive(uint8_t* req) {
-        return check(BaseDevice::receive(req));
-    }
-
-    Result receive_confirmation(uint8_t* rsp) {
-        return check(BaseDevice::receive_confirmation(rsp));
-    }
-
-    Result reply(const uint8_t* req, int req_length, modbus_mapping_t* mb_mapping) {
-        return check(BaseDevice::reply(req, req_length, mb_mapping));
-    }
-
-    Result reply_exception(const uint8_t* req, unsigned int exception_code) {
-        return check(BaseDevice::reply_exception(req, exception_code));
-    }
-
-    Result report_slave_id(int max_dest, uint8_t* dest) {
-        return check(BaseDevice::report_slave_id(max_dest, dest));
-    }
-
-    Result send_raw_request(const uint8_t* raw_req, int raw_req_length) {
-        return check(BaseDevice::send_raw_request(raw_req, raw_req_length));
-    }
-};
-
-class RTUDevice : public Device {
-public:
-    explicit RTUDevice(const std::string& device = "/dev/ttyUSB0", int baud = 115200,
-                       char parity = 'N', int data_bit = 8, int stop_bit = 1)
-        : Device(modbus_new_rtu(device.c_str(), baud, parity, data_bit, stop_bit)) {}
-
-    Result get_serial_mode() {
-        return check(BaseDevice::get_serial_mode());
-    }
-
-    Result set_serial_mode(int mode) {
-        return check(BaseDevice::set_serial_mode(mode));
-    }
-
-    Result get_rts() {
-        return check(BaseDevice::get_rts());
-    }
-
-    Result set_rts(int mode) {
-        return check(BaseDevice::set_rts(mode));
-    }
-
-    Result set_custom_rts(void (*set_rts_cb)(modbus_t* ctx, int on)) {
-        return check(BaseDevice::set_custom_rts(set_rts_cb));
-    }
-
-    Result get_rts_delay() {
-        return check(BaseDevice::get_rts_delay());
-    }
-
-    Result set_rts_delay(int us) {
-        return check(BaseDevice::set_rts_delay(us));
-    }
-};
-
-class TCPDevice : public Device {
-public:
-    explicit TCPDevice(const std::string& ip, int port)
-        : Device(modbus_new_tcp(ip.c_str(), port)) {}
-
-    explicit TCPDevice(const std::string& node, const std::string& service)
-        : Device(modbus_new_tcp_pi(node.c_str(), service.c_str())) {}
-
-    Result tcp_listen(int nb_connection) {
-        return check(BaseDevice::tcp_listen(nb_connection));
-    }
-
-    Result tcp_accept(int* socket) {
-        return check(BaseDevice::tcp_accept(socket));
-    }
-};
-
-}  // namespace exp
-#endif
 
 }  // namespace modbus
