@@ -47,6 +47,12 @@ struct ContextDeleter {
 
 class BaseDevice {
 public:
+    explicit BaseDevice(modbus_t* ctx) : ctx_(ctx) {
+        if (!ctx_) {
+            throw std::system_error(errno, std::generic_category(), "Failed to create context");
+        }
+    }
+
     modbus_t* get() const noexcept {
         return ctx_.get();
     }
@@ -181,18 +187,50 @@ public:
         return modbus_send_raw_request(ctx_.get(), raw_req, raw_req_length);
     }
 
-protected:
-    explicit BaseDevice(modbus_t* ctx) : ctx_(ctx) {
-        if (!ctx_) {
-            throw std::system_error(errno, std::generic_category(), "Failed to create context");
-        }
+    int get_serial_mode() {
+        return modbus_rtu_get_serial_mode(ctx_.get());
     }
 
+    int set_serial_mode(int mode) {
+        return modbus_rtu_set_serial_mode(ctx_.get(), mode);
+    }
+
+    int get_rts() {
+        return modbus_rtu_get_rts(ctx_.get());
+    }
+
+    int set_rts(int mode) {
+        return modbus_rtu_set_rts(ctx_.get(), mode);
+    }
+
+    int set_custom_rts(void (*set_rts_cb)(modbus_t* ctx, int on)) {
+        return modbus_rtu_set_custom_rts(ctx_.get(), set_rts_cb);
+    }
+
+    int get_rts_delay() {
+        return modbus_rtu_get_rts_delay(ctx_.get());
+    }
+
+    int set_rts_delay(int us) {
+        return modbus_rtu_set_rts_delay(ctx_.get(), us);
+    }
+
+    int tcp_listen(int nb_connection) {
+        return modbus_tcp_listen(ctx_.get(), nb_connection);
+    }
+
+    int tcp_accept(int* socket) {
+        return modbus_tcp_accept(ctx_.get(), socket);
+    }
+
+protected:
     std::unique_ptr<modbus_t, ContextDeleter> ctx_;
 };
 
 class Device : public BaseDevice {
 protected:
+    using BaseDevice::BaseDevice;
+
     static int check(int rc, const char* msg) {
         if (rc == -1) {
             throw ModbusException(msg, errno);
@@ -201,8 +239,6 @@ protected:
     }
 
 public:
-    using BaseDevice::BaseDevice;
-
     int flush() {
         return check(BaseDevice::flush(), "Flush failed");
     }
@@ -326,31 +362,31 @@ public:
         : Device(modbus_new_rtu(device.c_str(), baud, parity, data_bit, stop_bit)) {}
 
     int get_serial_mode() {
-        return check(modbus_rtu_get_serial_mode(ctx_.get()), "Get serial mode failed");
+        return check(BaseDevice::get_serial_mode(), "Get serial mode failed");
     }
 
     int set_serial_mode(int mode) {
-        return check(modbus_rtu_set_serial_mode(ctx_.get(), mode), "Set serial mode failed");
+        return check(BaseDevice::set_serial_mode(mode), "Set serial mode failed");
     }
 
     int get_rts() {
-        return check(modbus_rtu_get_rts(ctx_.get()), "Get RTS failed");
+        return check(BaseDevice::get_rts(), "Get RTS failed");
     }
 
     int set_rts(int mode) {
-        return check(modbus_rtu_set_rts(ctx_.get(), mode), "Set RTS failed");
+        return check(BaseDevice::set_rts(mode), "Set RTS failed");
     }
 
     int set_custom_rts(void (*set_rts_cb)(modbus_t* ctx, int on)) {
-        return check(modbus_rtu_set_custom_rts(ctx_.get(), set_rts_cb), "Set custom RTS failed");
+        return check(BaseDevice::set_custom_rts(set_rts_cb), "Set custom RTS failed");
     }
 
     int get_rts_delay() {
-        return check(modbus_rtu_get_rts_delay(ctx_.get()), "Get RTS delay failed");
+        return check(BaseDevice::get_rts_delay(), "Get RTS delay failed");
     }
 
     int set_rts_delay(int us) {
-        return check(modbus_rtu_set_rts_delay(ctx_.get(), us), "Set RTS delay failed");
+        return check(BaseDevice::set_rts_delay(us), "Set RTS delay failed");
     }
 };
 
@@ -363,11 +399,11 @@ public:
         : Device(modbus_new_tcp_pi(node.c_str(), service.c_str())) {}
 
     int tcp_listen(int nb_connection) {
-        return check(modbus_tcp_listen(ctx_.get(), nb_connection), "TCP listen failed");
+        return check(BaseDevice::tcp_listen(nb_connection), "TCP listen failed");
     }
 
-    int tcp_accept(int& socket) {
-        return check(modbus_tcp_accept(ctx_.get(), &socket), "TCP accept failed");
+    int tcp_accept(int* socket) {
+        return check(BaseDevice::tcp_accept(socket), "TCP accept failed");
     }
 };
 
@@ -450,6 +486,8 @@ using Result = std::expected<int, ModbusError>;
 
 class Device : public BaseDevice {
 protected:
+    using BaseDevice::BaseDevice;
+
     static Result check(int rc) {
         if (rc == -1) {
             return std::unexpected(ModbusError(errno));
@@ -458,8 +496,6 @@ protected:
     }
 
 public:
-    using BaseDevice::BaseDevice;
-
     Result flush() {
         return check(BaseDevice::flush());
     }
@@ -578,31 +614,31 @@ public:
         : Device(modbus_new_rtu(device.c_str(), baud, parity, data_bit, stop_bit)) {}
 
     Result get_serial_mode() {
-        return check(modbus_rtu_get_serial_mode(ctx_.get()));
+        return check(BaseDevice::get_serial_mode());
     }
 
     Result set_serial_mode(int mode) {
-        return check(modbus_rtu_set_serial_mode(ctx_.get(), mode));
+        return check(BaseDevice::set_serial_mode(mode));
     }
 
     Result get_rts() {
-        return check(modbus_rtu_get_rts(ctx_.get()));
+        return check(BaseDevice::get_rts());
     }
 
     Result set_rts(int mode) {
-        return check(modbus_rtu_set_rts(ctx_.get(), mode));
+        return check(BaseDevice::set_rts(mode));
     }
 
     Result set_custom_rts(void (*set_rts_cb)(modbus_t* ctx, int on)) {
-        return check(modbus_rtu_set_custom_rts(ctx_.get(), set_rts_cb));
+        return check(BaseDevice::set_custom_rts(set_rts_cb));
     }
 
     Result get_rts_delay() {
-        return check(modbus_rtu_get_rts_delay(ctx_.get()));
+        return check(BaseDevice::get_rts_delay());
     }
 
     Result set_rts_delay(int us) {
-        return check(modbus_rtu_set_rts_delay(ctx_.get(), us));
+        return check(BaseDevice::set_rts_delay(us));
     }
 };
 
@@ -615,11 +651,11 @@ public:
         : Device(modbus_new_tcp_pi(node.c_str(), service.c_str())) {}
 
     Result tcp_listen(int nb_connection) {
-        return check(modbus_tcp_listen(ctx_.get(), nb_connection));
+        return check(BaseDevice::tcp_listen(nb_connection));
     }
 
-    Result tcp_accept(int& socket) {
-        return check(modbus_tcp_accept(ctx_.get(), &socket));
+    Result tcp_accept(int* socket) {
+        return check(BaseDevice::tcp_accept(socket));
     }
 };
 
