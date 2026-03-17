@@ -12,11 +12,9 @@
 #include <string>
 #include <system_error>
 
-#if __has_include(<expected>)
+#if __cplusplus >= 202302L && __has_include(<expected>)
 #include <expected>
-#if defined(__cpp_lib_expected) || (__cplusplus > 202002L)
 #define MODBUSPP_HAS_EXPECTED
-#endif
 #endif
 
 namespace modbus {
